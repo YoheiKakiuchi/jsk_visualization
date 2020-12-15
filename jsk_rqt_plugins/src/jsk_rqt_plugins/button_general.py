@@ -105,8 +105,7 @@ class ServiceButtonGeneralWidget(QWidget):
         self._no_restore = rospy.get_param('~no_restore', False)
 
         if rospy.has_param("~layout_param"):
-            layout_yaml_string = rospy.get_param("~layout_param")
-            yaml_data = yaml.load(layout_yaml_string)
+            yaml_data = rospy.get_param("~layout_param")
             self.setupButtonsFromData(yaml_data)
             rospy.loginfo("setup Buttons from ~layout_param")
         elif rospy.has_param("~layout_yaml_file"):
@@ -120,6 +119,14 @@ class ServiceButtonGeneralWidget(QWidget):
         QMessageBox.about(self, "ERROR", message)
 
     def loadLayoutYamlFile(self, layout_yaml_file):
+        """
+        Load yaml file and setup Buttons.  Format of the yaml file should be:
+        - name: 'button name' (required)
+          image: 'path to image for icon' (optional)
+          image_size: 'width and height of icon' (optional)
+          service: 'service' (required)
+          column: 'column index' (optional, defaults to 0)
+        """
         # Initialize layout of the buttons from yaml file
         # The yaml file can be specified by rosparam
         if layout_yaml_file in 'package://':
@@ -132,19 +139,22 @@ class ServiceButtonGeneralWidget(QWidget):
             self.showError("Cannot find %s (%s)" % (
                            layout_yaml_file, resolved_layout_yaml_file))
             sys.exit(1)
-        self.setupButtons(resolved_layout_yaml_file)
-        self.show()
+        with open(resolved_layout_yaml_file) as f:
+            yaml_data = yaml.load(f)
+            self.setupButtonsFromData(yaml_data)
 
     def setupButtonsFromData(self, yaml_data):
         """
-        Parse yaml file and setup Buttons. Format of the yaml file should be:
-        - name: 'button name' (required)
-          image: 'path to image for icon' (optional)
-          image_size: 'width and height of icon' (optional)
-          service: 'service' (required)
-          column: 'column index' (optional, defaults to 0)
+        Setup Buttons from yaml string
         """
+        if self.layout():
+            ## already a layout exists
+            ## Is there any method to re-layout??
+            rospy.logwarn('a layout already exists')
+            return
+
         self.buttons = []
+
         # lookup colum direction
         direction = 'vertical'
         for d in yaml_data:
@@ -159,11 +169,11 @@ class ServiceButtonGeneralWidget(QWidget):
         column_indices = [d['column'] for d in yaml_data]
         max_column_index = max(*column_indices)
         if direction == 'vertical':
-            self.layout = QHBoxLayout()
+            self.local_layout = QHBoxLayout()
             self.layout_boxes = [QVBoxLayout()
                                  for i in range(max_column_index + 1)]
         else:  # direction == 'horizontal'
-            self.layout = QVBoxLayout()
+            self.local_layout = QVBoxLayout()
             self.layout_boxes = [QHBoxLayout()
                                  for i in range(max_column_index + 1)]
         self.button_groups = [QGroupBox()
@@ -211,22 +221,9 @@ class ServiceButtonGeneralWidget(QWidget):
         for i in range(len(self.button_groups)):
             self.button_groups[i].setLayout(self.layout_boxes[i])
         for group in self.button_groups:
-            self.layout.addWidget(group)
-        self.setLayout(self.layout)
-
-    def setupButtons(self, yaml_file):
-        """
-        Parse yaml file and setup Buttons. Format of the yaml file should be:
-        - name: 'button name' (required)
-          image: 'path to image for icon' (optional)
-          image_size: 'width and height of icon' (optional)
-          service: 'service' (required)
-          column: 'column index' (optional, defaults to 0)
-        """
-        self.buttons = []
-        with open(yaml_file) as f:
-            yaml_data = yaml.load(f)
-            self.setupButtonsFromData(yaml_data)
+            self.local_layout.addWidget(group)
+        self.setLayout(self.local_layout)
+        self.show()
 
     def buttonCallback(self, service_name, service_type):
         """
@@ -252,21 +249,26 @@ class ServiceButtonGeneralWidget(QWidget):
 
     def save_settings(self, plugin_settings, instance_settings):
         if self._layout_param:
+            rospy.loginfo("save setting is calling. %s" % self._layout_param)
             instance_settings.set_value("layout_param", self._layout_param)
-            rospy.loginfo("save setting is called. %s" % self._layout_param)
 
     def restore_settings(self, plugin_settings, instance_settings):
         if instance_settings.value("layout_param") and (not self._no_restore):
             self._layout_param = instance_settings.value("layout_param")
-            self.loadLayoutYamlFile(self._layout_param)
-            rospy.loginfo("restore setting is called. %s" % self._layout_param)
+            rospy.loginfo("restore setting is calling. %s" % self._layout_param)
+            self.setupButtonsFromData(self._layout_param)
+
 
     def trigger_configuration(self):
+        """
+        function for processing the configuration button
+        """
         self._dialog.exec_()
         l_param = self._dialog.value
         if rospy.has_param:
             l_param = rospy.get_param(self._dialog.value)
 
         self._layout_param = l_param
-        self.loadLayoutYamlFile(self._layout_param)
-        rospy.loginfo("trigger configuration is called. %s" % self._layout_param)
+        rospy.loginfo("trigger configuration is calling. %s" % self._layout_param)
+        self.setupButtonsFromData(self._layout_param)
+
