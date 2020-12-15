@@ -52,7 +52,13 @@
   <!-- rqt_service_button -->
   <node name="rqt_service_buttons"
         pkg="jsk_rqt_plugins" type="rqt_service_buttons"
-        required="true"/>
+        required="true" >
+    <rosparam>
+      layout_param:
+        - {name: 'Button A', service: dummy1, column: 0}
+        - {name: 'Button B', service: dummy2, column: 0}
+    </rosparam>
+  </node>
 
   <!-- rqt_status_light -->
   <node name="pub_sample_status"
