@@ -26,6 +26,8 @@ from rqt_gui_py.plugin import Plugin
 from std_msgs.msg import Bool
 from std_msgs.msg import Time
 from std_srvs.srv import Empty
+from std_srvs.srv import SetBool
+from std_srvs.srv import Trigger
 
 if LooseVersion(python_qt_binding.QT_BINDING_VERSION).version[0] >= 5:
     from python_qt_binding.QtWidgets import QAction
@@ -226,17 +228,26 @@ class ServiceButtonGeneralWidget(QWidget):
             yaml_data = yaml.load(f)
             self.setupButtonsFromData(yaml_data)
 
-    def buttonCallback(self, service_name):
+    def buttonCallback(self, service_name, service_type):
         """
         return function as callback
         """
-        return lambda x: self.buttonCallbackImpl(service_name)
+        return lambda checked: self.buttonCallbackImpl(checked, service_name, service_type)
 
-    def buttonCallbackImpl(self, service_name):
-        srv = rospy.ServiceProxy(service_name, Empty)
+    def buttonCallbackImpl(self, checked, service_name, service_type=Empty):
+        srv = rospy.ServiceProxy(service_name, service_type)
         try:
-            srv()
-        except rospy.ServiceException, e:
+            if service_type == SetBool:
+                res = srv(checked)
+            else:
+                res = srv()
+            if hasattr(res, 'success'):
+                success = res.success
+                if not success:
+                    self.showError(
+                        "Succeeded to call {}, but service response is res.success=False"
+                        .format(service_name))
+        except rospy.ServiceException as e:
             self.showError("Failed to call %s" % service_name)
 
     def save_settings(self, plugin_settings, instance_settings):
